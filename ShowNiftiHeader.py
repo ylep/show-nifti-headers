@@ -1,7 +1,7 @@
 #! /usr/bin/env python2
 # -*- coding: utf-8 -*-
 
-"""Print the header of a NIFTI-1 file in human-readable form
+"""Print the header of a NIFTI-1 file in human-readable form.
 
 Gzip-compressed files are recognized if their name ends in '.gz'.
 Standard input is used if the file name is a single hyphen '-'.
@@ -433,6 +433,12 @@ class NIfTI1Header(object):
         except KeyError:
             raise AttributeError("no such attribute {0!r}".format(name))
 
+    def __dir__(self):
+        type_dir = set(dir(type(self)))
+        dict_attributes = set(self.__dict__)
+        raw_attributes = set(self.raw.iterkeys())
+        return list(type_dir | dict_attributes | raw_attributes)
+
     def __repr__(self):
         return "NIfTI1Header({0!r})".format(self.raw)
 
@@ -758,6 +764,7 @@ def print_rotation_matrix(R, file=sys.stdout):
 
 
 def main():
+    "The script's entry point"
     # Process command line
     from optparse import OptionParser
     parser = OptionParser(description=__doc__,
