@@ -170,7 +170,7 @@ xyzt_units_dict = {
 space_unit_text_dict = {
     1: " m",
     2: " mm",
-    3: " µm"
+    3: " µm",
 }
 
 time_unit_text_dict = {
@@ -179,7 +179,7 @@ time_unit_text_dict = {
     24: " µs",
     32: " Hz",
     40: " ppm",
-    48: " rad"
+    48: " rad",
 }
 
 slice_code_dict = {
@@ -200,7 +200,7 @@ xform_code_dict = {
 
 
 class NIfTI1Header(object):
-    """In-memory representation of a NIfTI-1 header
+    """In-memory representation of a NIfTI-1 header.
 
     Can be constructed from a byte string containing a raw header. The
     fields can then be accessed as attributes.  Specialized attributes
@@ -212,32 +212,32 @@ class NIfTI1Header(object):
     """
 
     @staticmethod
-    def test_byte_order(binary_header, byte_order):
-        "Test if a binary header uses the given byte order ('<' or '>')"
+    def _test_byte_order(binary_header, byte_order):
+        """Test if a binary header uses the given byte order ('<' or '>')."""
         dim0_binary = binary_header[40:42]
         dim0 = struct.unpack(str(byte_order + 'h'), dim0_binary)[0]
         return 1 <= dim0 <= 7
 
     @classmethod
-    def guess_byte_order(cls, binary_header):
-        """Guess the byte order of a raw binary NIfTI-1 header
+    def _guess_byte_order(cls, binary_header):
+        """Guess the byte order of a raw binary NIfTI-1 header.
 
         Return '<' for little-endian, '>' for big-endian (suitable for
         configuring the struct module).
         """
         native = '>' if sys.byteorder == 'big' else '<'
-        if cls.test_byte_order(binary_header, native):
+        if cls._test_byte_order(binary_header, native):
             return '<'
         else:
             other = '<' if sys.byteorder == 'big' else '>'
-            if cls.test_byte_order(binary_header, other):
+            if cls._test_byte_order(binary_header, other):
                 return '>'
             else:
                 raise InconsistentNIfTI1Error("dim[0] must lie in range 1..7")
 
     @staticmethod
-    def test_magic_string_version(binary_header):
-        "Test header for a NIfTI magic string, returning NIfTI version or None"
+    def _test_magic_string_version(binary_header):
+        """Test NIfTI magic string, returning NIfTI version or None."""
         magic_field = binary_header[344:348]
         if magic_field[0:1] != b'n' or magic_field[3:4] != b'\0':
             return None
@@ -247,12 +247,12 @@ class NIfTI1Header(object):
             return int(str(magic_field[2:3]))
 
     def __init__(self, source, check_consistency=True):
-        """Initialize header data
+        """Initialize header data.
 
         The data source can be a raw binary header contained in a
         Python byte string, or a mapping containing raw header fields.
         """
-        # TODO: Once Python 2.6 support can be dropped, raw could be
+        # Once Python 2.6 support can be dropped, raw could be
         # of type collections.OrderedDict
         if isinstance(source, collections.Mapping):
             self.raw = dict(source)
@@ -263,20 +263,20 @@ class NIfTI1Header(object):
             self.check_consistency()
 
     def from_binary(self, binary_header):
-        "Load from a raw binary header"
+        """Load from a raw binary header."""
         if len(binary_header) < 348:
             raise NotNIfTI1Error(
                 "file too short ({0} bytes, header is at least 348 bytes)"
                 .format(len(binary_header)))
 
-        nifti_version = self.test_magic_string_version(binary_header)
+        nifti_version = self._test_magic_string_version(binary_header)
         if nifti_version is None:
             raise NotNIfTI1Error("missing NIfTI magic string")
         elif nifti_version != 1:
             raise NotNIfTI1Error("unsupported NIfTI version {0}"
                                  .format(nifti_version))
 
-        self.byte_order = self.guess_byte_order(binary_header)
+        self.byte_order = self._guess_byte_order(binary_header)
 
         unpack = struct.unpack(str(self.byte_order + header_struct_format),
                                binary_header[:348])
@@ -347,11 +347,10 @@ class NIfTI1Header(object):
             self.extensions_present = False
 
     def check_consistency(self):
-        """Check the header's raw data
+        """Check consistency of the header's raw data.
 
         - If a critical inconsistency is discovered, NIfTI1FormatError
           is raised
-
         - For less critical inconsistencies, a InconsistentNIfTI1Error
           object is *returned*
         """
@@ -398,36 +397,36 @@ class NIfTI1Header(object):
 
     @property
     def data_type(self):
-        "The data_type field as a byte string"
+        """The data_type field as a byte string."""
         return self.raw['data_type'].rstrip(b'\0')
 
     @property
     def db_name(self):
-        "The db_name field as a byte string"
+        """The db_name field as a byte string."""
         return self.raw['db_name'].rstrip(b'\0')
 
     @property
     def vox_offset(self):
-        "The vox_offset field as an integer"
+        """The vox_offset field as an integer."""
         return int(self.raw['vox_offset'])
 
     @property
     def descrip(self):
-        "The descrip field as a byte string"
+        """The descrip field as a byte string."""
         return self.raw['descrip'].rstrip(b'\0')
 
     @property
     def aux_file(self):
-        "The aux_file field as a byte string"
+        """The aux_file field as a byte string."""
         return self.raw['aux_file'].rstrip(b'\0')
 
     @property
     def intent_name(self):
-        "The intent_name field as a byte string"
+        """The intent_name field as a byte string."""
         return self.raw['intent_name'].rstrip(b'\0')
 
     def __getattr__(self, name):
-        "Access raw header fields whose access is not overridden by properties"
+        """Access raw header fields."""
         try:
             return self.raw[name]
         except KeyError:
@@ -443,8 +442,8 @@ class NIfTI1Header(object):
         return "NIfTI1Header({0!r})".format(self.raw)
 
     def print_raw(self, file=sys.stdout, describe_fields=False):
-        "Print raw header fields, with optional description"
-        for code, name, description in header_fields_description:
+        """Print raw header fields, optionally with description."""
+        for _, name, description in header_fields_description:
             value = self.raw[name]
             if describe_fields:
                 print("{0:14} {1!r} [{2}]".format(name, value, description),
@@ -453,7 +452,7 @@ class NIfTI1Header(object):
                 print("{0:14} {1!r}".format(name, value), file=file)
 
     def print_interpreted(self, file=sys.stdout):
-        """Print interpreted header data on the supplied stream"""
+        """Print interpreted header data on the supplied stream."""
         if self.extensions_present:
             print("WARNING: unsupported NIfTI-1 extensions were detected.\n"
                   "The data or metadata contained in  these extensions"
@@ -485,6 +484,7 @@ class NIfTI1Header(object):
             print("qform_code = {0}"
                   .format(self.readable_qform_code), file=file)
 
+            print("pixdim: {0}".format(readable_pixdim), file=file)
             print("qfac = {0}".format(self.readable_qfac), file=file)
 
             print("quatern_abcd: {0}".format(self.quatern_abcd), file=file)
@@ -538,7 +538,7 @@ class NIfTI1Header(object):
                 print("slice_end = {0}".format(self.slice_end), file=file)
 
         def print_misc_title(already_printed=[]):
-            "Print the title as needed, at most once"
+            """Print the title as needed, at most once."""
             # The (mutable) list printed_already evaluates to false
             # only if it is empty
             if not already_printed:
@@ -569,11 +569,11 @@ class NIfTI1Header(object):
             print("cal_min = {0}".format(self.cal_min), file=file)
             print("cal_max = {0}".format(self.cal_max), file=file)
 
-        # TODO: display unused ANALYZE 7.5 fields data_type and db_name
+        # Unused ANALYZE 7.5 fields data_type and db_name are not displayed
 
     @property
     def readable_qform_code(self):
-        "Readable value of the qform_code field"
+        """Readable value of the qform_code field."""
         try:
             return xform_code_dict[self.qform_code]
         except KeyError:
@@ -581,7 +581,7 @@ class NIfTI1Header(object):
 
     @property
     def readable_sform_code(self):
-        "Readable value of the sform_code field"
+        """Readable value of the sform_code field."""
         try:
             return xform_code_dict[self.sform_code]
         except KeyError:
@@ -589,7 +589,7 @@ class NIfTI1Header(object):
 
     @property
     def qfac(self):
-        "Value of qfac (used in method 2)"
+        """Value of qfac (used in method 2)."""
         raw_qfac = self.pixdim[0]
         if raw_qfac == 0.0 or raw_qfac == 1.0:
             return 1
@@ -600,7 +600,7 @@ class NIfTI1Header(object):
 
     @property
     def readable_qfac(self):
-        "Readable value of qfac"
+        """Readable value of qfac."""
         if self.pixdim[0] in (0.0, 1.0, -1.0):
             return str(self.qfac)
         else:
@@ -608,7 +608,7 @@ class NIfTI1Header(object):
 
     @property
     def quatern_abcd(self):
-        "Quaternion values (a, b, c, d)"
+        """Quaternion values (a, b, c, d)."""
         import math
         b = self.quatern_b
         c = self.quatern_c
@@ -618,12 +618,12 @@ class NIfTI1Header(object):
 
     @property
     def qoffset_xyz(self):
-        "Quaternion offsets (x, y, z)"
+        """Quaternion offsets (x, y, z)."""
         return (self.qoffset_x, self.qoffset_y, self.qoffset_z)
 
     @property
     def rotation_matrix_method2(self):
-        """Equivalent rotation-translation matrix for method 2 quaternion data
+        """Equivalent rotation-translation matrix for method 2 quaternion data.
 
         The calculation is as described in the reference NIfTI-1 header,
         under the name "Method 2".
@@ -644,27 +644,27 @@ class NIfTI1Header(object):
 
     @property
     def rotation_matrix_method3(self):
-        "Rotation matrix of method 3"
+        """Rotation matrix of method 3."""
         return (self.srow_x, self.srow_y, self.srow_z)
 
     @property
     def slice_dim(self):
-        "MRI slice selection direction"
+        """MRI slice selection direction."""
         return (self.dim_info >> 4) & 0x03
 
     @property
     def phase_dim(self):
-        "MRI phase encoding direction"
+        """MRI phase encoding direction."""
         return (self.dim_info >> 2) & 0x03
 
     @property
     def freq_dim(self):
-        "MRI frequency encoding direction"
-        return self.dim & 0x03
+        """MRI frequency encoding direction."""
+        return self.dim_info & 0x03
 
     @property
     def readable_slice_code(self):
-        "Readable flag for the slice_code field"
+        """Readable flag for the slice_code field."""
         try:
             return slice_code_dict[self.slice_code]
         except KeyError:
@@ -672,7 +672,7 @@ class NIfTI1Header(object):
 
     @property
     def readable_datatype(self):
-        "Readable flag for the datatype field"
+        """Readable flag for the datatype field."""
         try:
             return datatype_info_dict[self.datatype][0]
         except KeyError:
@@ -680,12 +680,12 @@ class NIfTI1Header(object):
 
     @property
     def meaningful_dim(self):
-        "Meaningful list of sizes along each dimension of the dataset"
+        """Meaningful list of sizes along each dimension of the dataset."""
         return self.dim[1:(self.dim[0] + 1)]
 
     @property
     def readable_pixdim(self):
-        "Yield readable values for the pixdim field, with units as appropriate"
+        """Yield readable values for the pixdim field, with units."""
         for i in xrange(1, self.dim[0] + 1):
             if 1 <= i <= 3:  # space dimensions
                 yield "{0:.3}{1}".format(self.pixdim[i], self.space_unit_text)
@@ -696,7 +696,7 @@ class NIfTI1Header(object):
 
     @property
     def readable_xyzt_units(self):
-        ""
+        """Readable value for the xyzt_units field."""
         if self.xyzt_units == 0x00:
             yield xyzt_units_dict[0]
         else:
@@ -719,17 +719,17 @@ class NIfTI1Header(object):
 
     @property
     def space_unit_text(self):
-        "Unit along space dimensions as a SI abbreviation"
+        """Unit along space dimensions as a SI abbreviationx."""
         return space_unit_text_dict.get(self.xyzt_units & 0x07, "")
 
     @property
     def time_unit_text(self):
-        "Unit along time dimension as a SI abbreviation"
+        """Unit along time dimension as a SI abbreviation."""
         return time_unit_text_dict.get(self.xyzt_units & 0x38, "")
 
     @property
     def separate_dim_info(self):
-        "Yield readable sub-values of the dim_info field"
+        """Yield readable sub-values of the dim_info field."""
         if self.freq_dim:
             yield "{0} /* frequency */".format(self.freq_dim)
         if self.phase_dim:
@@ -741,7 +741,7 @@ class NIfTI1Header(object):
 
     @property
     def readable_dim_info(self):
-        "Readable value for the dim_info field (in C notation)"
+        """Readable value for the dim_info field (in C notation)."""
         if self.dim_info == 0:
             return "0 /* unspecified */"
         else:
@@ -749,7 +749,7 @@ class NIfTI1Header(object):
 
     @property
     def readable_intent_code(self):
-        "Readable flag for the intent_code field"
+        """Readable flag for the intent_code field."""
         try:
             return intent_dict[self.intent_code]
         except KeyError:
@@ -757,14 +757,14 @@ class NIfTI1Header(object):
 
 
 def print_rotation_matrix(R, file=sys.stdout):
-    "Print a rotation-translation matrix to the given file"
+    """Print a rotation-translation matrix to the given file."""
     print("{0:8.5f} {1:8.5f} {2:8.5f} {3:8.3f}".format(*R[0]), file=file)
     print("{0:8.5f} {1:8.5f} {2:8.5f} {3:8.3f}".format(*R[1]), file=file)
     print("{0:8.5f} {1:8.5f} {2:8.5f} {3:8.3f}".format(*R[2]), file=file)
 
 
 def main():
-    "The script's entry point"
+    """The script's entry point."""
     # Process command line
     from optparse import OptionParser
     parser = OptionParser(description=__doc__,
@@ -797,31 +797,31 @@ def main():
         try:
             with contextlib.closing(gzip.open(filename, 'rb')) as f:
                 binary_header = f.read(352)
-        except IOError as e:
+        except IOError as exc:
             sys.exit("error reading {0!r} as a gzip-compressed file: {1}"
-                     .format(filename, e))
+                     .format(filename, exc))
     elif filename == "-":
         try:
             binary_header = sys.stdin.read(352)
             sys.stdin.close()
-        except IOError as e:
-            sys.exit("error reading standard input: {0}".format(e))
+        except IOError as exc:
+            sys.exit("error reading standard input: {0}".format(exc))
     else:
         import io
         try:
             with io.open(filename, 'rb', buffering=0) as f:
                 binary_header = f.read(352)
-        except IOError as e:
-            sys.exit("error reading {0!r}: {1}".format(filename, e))
+        except IOError as exc:
+            sys.exit("error reading {0!r}: {1}".format(filename, exc))
 
     # Parse header
     try:
         header = NIfTI1Header(binary_header)
-    except NotNIfTI1Error as e:
-        sys.exit("error: {0} is not a NIfTI-1 file: {1}".format(filename, e))
-    except InconsistentNIfTI1Error as e:
+    except NotNIfTI1Error as exc:
+        sys.exit("error: {0} is not a NIfTI-1 file: {1}".format(filename, exc))
+    except InconsistentNIfTI1Error as exc:
         sys.exit("error: inconsistent NIfTI-1 file {0}: {1}"
-                 .format(filename, e))
+                 .format(filename, exc))
 
     # Print output to stdout, ensuring proper failure if printing fails
     try:
@@ -831,8 +831,8 @@ def main():
             header.print_interpreted()
 
         sys.stdout.close()
-    except IOError as e:
-        sys.exit("error printing output: {0}".format(e))
+    except IOError as exc:
+        sys.exit("error printing output: {0}".format(exc))
 
 if __name__ == '__main__':
     main()
