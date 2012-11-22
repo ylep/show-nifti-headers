@@ -613,7 +613,7 @@ class NIfTI1Header(object):
         b = self.quatern_b
         c = self.quatern_c
         d = self.quatern_d
-        a = math.sqrt(1.0 - (b*b + c*c + d*d))
+        a = math.sqrt(max(1.0 - (b*b + c*c + d*d), 0.))
         return (a, b, c, d)
 
     @property
