@@ -745,7 +745,7 @@ class NIfTI1Header(object):
         if self.dim_info == 0:
             return "0 /* unspecified */"
         else:
-            return " & ".join(self.separate_dim_info)
+            return " | ".join(self.separate_dim_info)
 
     @property
     def readable_intent_code(self):
