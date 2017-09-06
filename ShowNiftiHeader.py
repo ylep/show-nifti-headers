@@ -427,8 +427,8 @@ class NIfTI1Header(object):
             raise InconsistentNIfTIError("vox_offset must be an integer")
 
         # It is guaranteed by the byte order check that 1 <= dim[0] <= 7
-        for i, dim_i in enumerate(self.dim[1:(self.dim[0] + 2)], start=1):
-            if dim_i <= 0:
+        for i, dim_i in enumerate(self.dim[1:(self.dim[0] + 1)], start=1):
+            if not dim_i > 0:
                 raise InconsistentNIfTIError(
                     "dim[{0}] must be positive (is {1})".format(i, dim_i))
 
