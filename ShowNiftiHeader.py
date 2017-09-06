@@ -20,18 +20,18 @@ import struct
 import exceptions
 
 
-class NIfTI1FormatError(exceptions.Exception):
-    """Exception signalling errors encountered during NIfTI-1 file parsing"""
+class NIfTIFormatError(exceptions.Exception):
+    """Exception signalling errors encountered during NIfTI file parsing"""
     pass
 
 
-class NotNIfTI1Error(NIfTI1FormatError):
-    """Exception signalling that a file is not in NIfTI-1 format"""
+class NotNIfTIError(NIfTIFormatError):
+    """Exception signalling that a file is not in NIfTI format"""
     pass
 
 
-class InconsistentNIfTI1Error(NIfTI1FormatError):
-    """Exception signalling an inconsistency in a NIfTI-1 file"""
+class InconsistentNIfTIError(NIfTIFormatError):
+    """Exception signalling an inconsistency in a NIfTI file"""
     pass
 
 
@@ -283,7 +283,7 @@ class NIfTI1Header(object):
             if cls._test_byte_order(binary_header, other):
                 return '>'
             else:
-                raise InconsistentNIfTI1Error("dim[0] must lie in range 1..7")
+                raise InconsistentNIfTIError("dim[0] must lie in range 1..7")
 
     @staticmethod
     def _test_magic_string_version(binary_header):
@@ -315,16 +315,16 @@ class NIfTI1Header(object):
     def from_binary(self, binary_header):
         """Load from a raw binary header."""
         if len(binary_header) < 348:
-            raise NotNIfTI1Error(
+            raise NotNIfTIError(
                 "file too short ({0} bytes, header is at least 348 bytes)"
                 .format(len(binary_header)))
 
         nifti_version = self._test_magic_string_version(binary_header)
         if nifti_version is None:
-            raise NotNIfTI1Error("missing NIfTI magic string")
+            raise NotNIfTIError("missing NIfTI magic string")
         elif nifti_version != 1:
-            raise NotNIfTI1Error("unsupported NIfTI version {0}"
-                                 .format(nifti_version))
+            raise NotNIfTIError("unsupported NIfTI version {0}"
+                                .format(nifti_version))
 
         self.byte_order = self._guess_byte_order(binary_header)
 
@@ -399,49 +399,49 @@ class NIfTI1Header(object):
     def check_consistency(self):
         """Check consistency of the header's raw data.
 
-        - If a critical inconsistency is discovered, NIfTI1FormatError
+        - If a critical inconsistency is discovered, NIfTIFormatError
           is raised
-        - For less critical inconsistencies, a InconsistentNIfTI1Error
+        - For less critical inconsistencies, a InconsistentNIfTIError
           object is *returned*
         """
         if self.magic not in (b'ni1\0', b'n+1\0'):
-            raise NotNIfTI1Error("missing magic string")
+            raise NotNIfTIError("missing magic string")
 
         if self.sizeof_hdr != 348:
-            raise InconsistentNIfTI1Error("sizeof_hdr must be 348")
+            raise InconsistentNIfTIError("sizeof_hdr must be 348")
 
         datatype = self.datatype
         try:
             datatype_info = datatype_info_dict[datatype]
         except KeyError:
-            raise InconsistentNIfTI1Error("unknown datatype {0}"
-                                          .format(datatype))
+            raise InconsistentNIfTIError("unknown datatype {0}"
+                                         .format(datatype))
 
         if self.bitpix != datatype_info[1]:
-            raise InconsistentNIfTI1Error(
+            raise InconsistentNIfTIError(
                 "bitpix ({0}) does not match datatype {1}"
                 .format(self.bitpix, datatype_info[0]))
 
         raw_vox_offset = self.raw['vox_offset']
         if raw_vox_offset != round(raw_vox_offset):
-            raise InconsistentNIfTI1Error("vox_offset must be an integer")
+            raise InconsistentNIfTIError("vox_offset must be an integer")
 
         # It is guaranteed by the byte order check that 1 <= dim[0] <= 7
         for i, dim_i in enumerate(self.dim[1:(self.dim[0] + 2)], start=1):
             if dim_i <= 0:
-                raise InconsistentNIfTI1Error(
+                raise InconsistentNIfTIError(
                     "dim[{0}] must be positive (is {1})".format(i, dim_i))
 
         # The following errors are less critical: therefore, no
         # exception is raised, the errors are *returned* instead
         if self.onefile and self.vox_offset < 352:
-            return InconsistentNIfTI1Error(
+            return InconsistentNIfTIError(
                 "vox_offset should not be less than 352 (is {0})"
                 .format(self.vox_offset))
 
         if self.intent_code not in intent_dict:
-            return InconsistentNIfTI1Error("unknown intent_code value {0}"
-                                           .format(self.intent_code))
+            return InconsistentNIfTIError("unknown intent_code value {0}"
+                                          .format(self.intent_code))
         # Based on the intent code, other checks could be done
         # (e.g. dimensionality)
 
@@ -867,9 +867,9 @@ def main():
     # Parse header
     try:
         header = NIfTI1Header(binary_header)
-    except NotNIfTI1Error as exc:
+    except NotNIfTIError as exc:
         sys.exit("error: {0} is not a NIfTI-1 file: {1}".format(filename, exc))
-    except InconsistentNIfTI1Error as exc:
+    except InconsistentNIfTIError as exc:
         sys.exit("error: inconsistent NIfTI-1 file {0}: {1}"
                  .format(filename, exc))
 
