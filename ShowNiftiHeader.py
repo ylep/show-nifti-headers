@@ -272,6 +272,17 @@ class NIfTIHeader(object):
             else:
                 raise InconsistentNIfTIError("dim[0] must lie in range 1..7")
 
+    @staticmethod
+    def _test_magic_string_version(magic_field):
+        """Test NIfTI magic string, returning NIfTI version or None."""
+        if magic_field[0:1] != b'n' or magic_field[3:4] != b'\0':
+            return None
+        if magic_field[1:2] not in (b'i', b'+'):
+            return None
+        if b'1' <= magic_field[2:3] <= b'9':
+            return int(str(magic_field[2:3]))
+        # else return None is implied
+
     def __init__(self, source, check_consistency=True):
         """Initialize header data.
 
@@ -320,11 +331,6 @@ class NIfTIHeader(object):
 
         # The following errors are less critical: therefore, no
         # exception is raised, the errors are *returned* instead
-        if self.onefile and self.vox_offset < 352:
-            return InconsistentNIfTIError(
-                "vox_offset should not be less than 352 (is {0})"
-                .format(self.vox_offset))
-
         if self.intent_code not in INTENT_DICT:
             return InconsistentNIfTIError("unknown intent_code value {0}"
                                           .format(self.intent_code))
@@ -724,17 +730,6 @@ class NIfTI1Header(NIfTIHeader):
     STRUCT_FORMAT = NIFTI1_STRUCT_FORMAT
 
     @staticmethod
-    def _test_magic_string_version(magic_field):
-        """Test NIfTI magic string, returning NIfTI version or None."""
-        if magic_field[0:1] != b'n' or magic_field[3:4] != b'\0':
-            return None
-        if magic_field[1:2] not in (b'i', b'+'):
-            return None
-        if b'1' <= magic_field[2:3] <= b'9':
-            return int(str(magic_field[2:3]))
-        # else return None is implied
-
-    @staticmethod
     def _test_byte_order(binary_header, byte_order):
         """Test if a binary header uses the given byte order ('<' or '>')."""
         dim0_binary = binary_header[40:42]
@@ -834,15 +829,139 @@ class NIfTI1Header(NIfTIHeader):
           object is *returned*
         """
         if self.magic not in (b'ni1\0', b'n+1\0'):
-            raise NotNIfTIError("missing magic string")
+            raise NotNIfTIError("invalid magic string {0}".format(self.magic))
 
         if self.sizeof_hdr != 348:
             raise InconsistentNIfTIError("sizeof_hdr must be 348")
 
         super(NIfTI1Header, self).check_consistency()
 
+        # The following errors are less critical: therefore, no
+        # exception is raised, the errors are *returned* instead
+        if self.onefile and self.vox_offset < 540:
+            return InconsistentNIfTIError(
+                "vox_offset should not be less than 540 (is {0})"
+                .format(self.vox_offset))
+
     def __repr__(self):
         return "NIfTI1Header({0!r})".format(self.raw)
+
+
+class NIfTI2Header(NIfTIHeader):
+    """In-memory representation of a NIfTI-2 header.
+
+    Can be constructed from a byte string containing a raw header. The
+    fields can then be accessed as attributes.  Specialized attributes
+    exist that produce readable, symbolic values for certain fields
+    (as opposed to raw, bit-packed values).
+
+    The header can be output to a stream using the print_raw() and
+    print_interpreted() members.
+    """
+
+    FIELDS_DESCRIPTION = NIFTI2_FIELDS_DESCRIPTION
+    STRUCT_FORMAT = NIFTI2_STRUCT_FORMAT
+
+    @staticmethod
+    def _test_byte_order(binary_header, byte_order):
+        """Test if a binary header uses the given byte order ('<' or '>')."""
+        dim0_binary = binary_header[16:24]
+        dim0 = struct.unpack(str(byte_order + 'q'), dim0_binary)[0]
+        return 1 <= dim0 <= 7
+
+    def from_binary(self, binary_header):
+        """Load from a raw binary header."""
+        if len(binary_header) < 540:
+            raise NotNIfTIError(
+                "file too short ({0} bytes, header is at least 540 bytes)"
+                .format(len(binary_header)))
+
+        nifti_version = self._test_magic_string_version(binary_header[4:12])
+        if nifti_version is None:
+            raise NotNIfTIError("missing NIfTI-2 magic string")
+        elif nifti_version != 2:
+            raise NotNIfTIError("unsupported NIfTI version {0}"
+                                .format(nifti_version))
+
+        self.byte_order = self._guess_byte_order(binary_header)
+
+        unpack = struct.unpack(str(self.byte_order + self.STRUCT_FORMAT),
+                               binary_header[:540])
+        assert len(unpack) == 60
+
+        self.raw['sizeof_hdr'] = unpack[0]
+        self.raw['magic'] = unpack[1]
+
+        self.raw['datatype'] = unpack[2]
+        self.raw['bitpix'] = unpack[3]
+        self.raw['dim'] = unpack[4:12]
+        self.raw['intent_p1'] = unpack[12]
+        self.raw['intent_p2'] = unpack[13]
+        self.raw['intent_p3'] = unpack[14]
+        self.raw['pixdim'] = unpack[15:23]
+        self.raw['vox_offset'] = unpack[23]
+        self.raw['scl_slope'] = unpack[24]
+        self.raw['scl_inter'] = unpack[25]
+        self.raw['cal_max'] = unpack[26]
+        self.raw['cal_min'] = unpack[27]
+        self.raw['slice_duration'] = unpack[28]
+        self.raw['toffset'] = unpack[29]
+        self.raw['slice_start'] = unpack[30]
+        self.raw['slice_end'] = unpack[31]
+        self.raw['descrip'] = unpack[32].rstrip(b'\0')
+        self.raw['aux_file'] = unpack[33].rstrip(b'\0')
+        self.raw['qform_code'] = unpack[34]
+        self.raw['sform_code'] = unpack[35]
+        self.raw['quatern_b'] = unpack[36]
+        self.raw['quatern_c'] = unpack[37]
+        self.raw['quatern_d'] = unpack[38]
+        self.raw['qoffset_x'] = unpack[39]
+        self.raw['qoffset_y'] = unpack[40]
+        self.raw['qoffset_z'] = unpack[41]
+        self.raw['srow_x'] = unpack[42:46]
+        self.raw['srow_y'] = unpack[46:50]
+        self.raw['srow_z'] = unpack[50:54]
+        self.raw['slice_code'] = unpack[54]
+        self.raw['xyzt_units'] = unpack[55]
+        self.raw['intent_code'] = unpack[56]
+        self.raw['intent_name'] = unpack[57].rstrip(b'\0')
+        self.raw['dim_info'] = unpack[58]
+        self.raw['unused_str'] = unpack[59].rstrip(b'\0')
+
+        self.onefile = (self.magic[1:2] == b'+')
+
+        binary_extender = binary_header[540:544]
+        if binary_extender:
+            self.extensions_present = (binary_extender[0:1] != b'\0')
+        else:
+            self.extensions_present = False
+
+    def check_consistency(self):
+        """Check consistency of the header's raw data.
+
+        - If a critical inconsistency is discovered, NIfTIFormatError
+          is raised
+        - For less critical inconsistencies, a InconsistentNIfTIError
+          object is *returned*
+        """
+        if self.magic not in (b'ni2\0\r\n\032\n', b'n+2\0\r\n\032\n'):
+            raise NotNIfTIError("invalid magic string {0}".format(self.magic))
+
+        if self.sizeof_hdr != 540:
+            raise InconsistentNIfTIError("sizeof_hdr must be 540")
+
+        super(NIfTI2Header, self).check_consistency()
+
+        # The following errors are less critical: therefore, no
+        # exception is raised, the errors are *returned* instead
+        if self.onefile and self.vox_offset < 540:
+            return InconsistentNIfTIError(
+                "vox_offset should not be less than 540 (is {0})"
+                .format(self.vox_offset))
+
+
+    def __repr__(self):
+        return "NIfTI2Header({0!r})".format(self.raw)
 
 
 def print_affine_matrix(R, file=sys.stdout):
@@ -886,13 +1005,13 @@ def main():
         import contextlib
         try:
             with contextlib.closing(gzip.open(filename, 'rb')) as f:
-                binary_header = f.read(352)
+                binary_header = f.read(540)
         except IOError as exc:
             sys.exit("error reading {0!r} as a gzip-compressed file: {1}"
                      .format(filename, exc))
     elif filename == "-":
         try:
-            binary_header = sys.stdin.read(352)
+            binary_header = sys.stdin.read(540)
             sys.stdin.close()
         except IOError as exc:
             sys.exit("error reading standard input: {0}".format(exc))
@@ -900,13 +1019,13 @@ def main():
         import io
         try:
             with io.open(filename, 'rb', buffering=0) as f:
-                binary_header = f.read(352)
+                binary_header = f.read(540)
         except IOError as exc:
             sys.exit("error reading {0!r}: {1}".format(filename, exc))
 
     # Parse header
     try:
-        header = NIfTI1Header(binary_header)
+        header = NIfTI2Header(binary_header, check_consistency=True)
     except NotNIfTIError as exc:
         sys.exit("error: {0} is not a NIfTI-1 file: {1}".format(filename, exc))
     except InconsistentNIfTIError as exc:
