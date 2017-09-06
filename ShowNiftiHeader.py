@@ -663,7 +663,7 @@ class NIfTI1Header(object):
         b = self.quatern_b
         c = self.quatern_c
         d = self.quatern_d
-        a = math.sqrt(max(1.0 - (b*b + c*c + d*d), 0.))
+        a = math.sqrt(max(1.0 - (b * b + c * c + d * d), 0.))
         return (a, b, c, d)
 
     @property
@@ -684,12 +684,18 @@ class NIfTI1Header(object):
         pj = self.pixdim[2]
         pk = self.pixdim[3] * self.qfac
 
-        row_x = (pi * (a*a + b*b - c*c - d*d), pj * (2*b*c - 2*a*d),
-                 pk * (2*b*d + 2*a*c), self.qoffset_x)
-        row_y = (pi * (2*b*c + 2*a*d), pj * (a*a + c*c - b*b - d*d),
-                 pk * (2*c*d - 2*a*b), self.qoffset_y)
-        row_z = (pi * (2*b*d - 2*a*c), pj * (2*c*d + 2*a*b),
-                 pk * (a*a+d*d - c*c-b*b), self.qoffset_z)
+        row_x = (pi * (a * a + b * b - c * c - d * d),
+                 pj * (2 * b * c - 2 * a * d),
+                 pk * (2 * b * d + 2 * a * c),
+                 self.qoffset_x)
+        row_y = (pi * (2 * b * c + 2 * a * d),
+                 pj * (a * a + c * c - b * b - d * d),
+                 pk * (2 * c * d - 2 * a * b),
+                 self.qoffset_y)
+        row_z = (pi * (2 * b * d - 2 * a * c),
+                 pj * (2 * c * d + 2 * a * b),
+                 pk * (a * a + d * d - c * c - b * b),
+                 self.qoffset_z)
         return (row_x, row_y, row_z)
 
     @property
@@ -883,6 +889,7 @@ def main():
         sys.stdout.close()
     except IOError as exc:
         sys.exit("error printing output: {0}".format(exc))
+
 
 if __name__ == '__main__':
     main()
