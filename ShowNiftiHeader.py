@@ -249,18 +249,10 @@ XFORM_CODE_DICT = {
 }
 
 
-class NIfTI1Header(object):
-    """In-memory representation of a NIfTI-1 header.
 
-    Can be constructed from a byte string containing a raw header. The
-    fields can then be accessed as attributes.  Specialized attributes
-    exist that produce readable, symbolic values for certain fields
-    (as opposed to raw, bit-packed values).
 
-    The header can be output to a stream using the print_raw() and
-    print_interpreted() members.
-    """
 
+class NIfTIHeader(object):
     @staticmethod
     def _test_byte_order(binary_header, byte_order):
         """Test if a binary header uses the given byte order ('<' or '>')."""
@@ -270,7 +262,7 @@ class NIfTI1Header(object):
 
     @classmethod
     def _guess_byte_order(cls, binary_header):
-        """Guess the byte order of a raw binary NIfTI-1 header.
+        """Guess the byte order of a raw binary NIfTI header.
 
         Return '<' for little-endian, '>' for big-endian (suitable for
         configuring the struct module).
@@ -284,17 +276,6 @@ class NIfTI1Header(object):
                 return '>'
             else:
                 raise InconsistentNIfTIError("dim[0] must lie in range 1..7")
-
-    @staticmethod
-    def _test_magic_string_version(binary_header):
-        """Test NIfTI magic string, returning NIfTI version or None."""
-        magic_field = binary_header[344:348]
-        if magic_field[0:1] != b'n' or magic_field[3:4] != b'\0':
-            return None
-        elif magic_field[1:2] not in (b'i', b'+'):
-            return None
-        elif b'1' <= magic_field[2:3] <= b'9':
-            return int(str(magic_field[2:3]))
 
     def __init__(self, source, check_consistency=True):
         """Initialize header data.
@@ -312,90 +293,6 @@ class NIfTI1Header(object):
         if check_consistency:
             self.check_consistency()
 
-    def from_binary(self, binary_header):
-        """Load from a raw binary header."""
-        if len(binary_header) < 348:
-            raise NotNIfTIError(
-                "file too short ({0} bytes, header is at least 348 bytes)"
-                .format(len(binary_header)))
-
-        nifti_version = self._test_magic_string_version(binary_header)
-        if nifti_version is None:
-            raise NotNIfTIError("missing NIfTI magic string")
-        elif nifti_version != 1:
-            raise NotNIfTIError("unsupported NIfTI version {0}"
-                                .format(nifti_version))
-
-        self.byte_order = self._guess_byte_order(binary_header)
-
-        unpack = struct.unpack(str(self.byte_order + NIFTI1_STRUCT_FORMAT),
-                               binary_header[:348])
-        assert len(unpack) == 66
-
-        self.raw['sizeof_hdr'] = unpack[0]
-        self.raw['data_type'] = unpack[1].rstrip(b'\0')
-        self.raw['db_name'] = unpack[2].rstrip(b'\0')
-        self.raw['extents'] = unpack[3]
-        self.raw['session_error'] = unpack[4]
-        self.raw['regular'] = unpack[5]
-
-        self.raw['dim_info'] = unpack[6]
-        self.raw['dim'] = unpack[7:15]
-        assert 1 <= self.dim[0] <= 7  # Guaranteed by byte order check
-
-        self.raw['intent_p1'] = unpack[15]
-        self.raw['intent_p2'] = unpack[16]
-        self.raw['intent_p3'] = unpack[17]
-        self.raw['intent_code'] = unpack[18]
-
-        self.raw['datatype'] = unpack[19]
-        self.raw['bitpix'] = unpack[20]
-
-        self.raw['slice_start'] = unpack[21]
-        self.raw['pixdim'] = unpack[22:30]
-
-        self.raw['vox_offset'] = unpack[30]
-
-        self.raw['scl_slope'] = unpack[31]
-        self.raw['scl_inter'] = unpack[32]
-        self.raw['slice_end'] = unpack[33]
-        self.raw['slice_code'] = unpack[34]
-        self.raw['xyzt_units'] = unpack[35]
-        self.raw['cal_max'] = unpack[36]
-        self.raw['cal_min'] = unpack[37]
-        self.raw['slice_duration'] = unpack[38]
-        self.raw['toffset'] = unpack[39]
-        self.raw['glmax'] = unpack[40]
-        self.raw['glmin'] = unpack[41]
-
-        self.raw['descrip'] = unpack[42]
-        self.raw['aux_file'] = unpack[43]
-
-        self.raw['qform_code'] = unpack[44]
-        self.raw['sform_code'] = unpack[45]
-
-        self.raw['quatern_b'] = unpack[46]
-        self.raw['quatern_c'] = unpack[47]
-        self.raw['quatern_d'] = unpack[48]
-        self.raw['qoffset_x'] = unpack[49]
-        self.raw['qoffset_y'] = unpack[50]
-        self.raw['qoffset_z'] = unpack[51]
-
-        self.raw['srow_x'] = unpack[52:56]
-        self.raw['srow_y'] = unpack[56:60]
-        self.raw['srow_z'] = unpack[60:64]
-
-        self.raw['intent_name'] = unpack[64]
-
-        self.raw['magic'] = unpack[65]
-        self.onefile = (self.magic[1:2] == b'+')
-
-        binary_extender = binary_header[348:352]
-        if binary_extender:
-            self.extensions_present = (binary_extender[0:1] != b'\0')
-        else:
-            self.extensions_present = False
-
     def check_consistency(self):
         """Check consistency of the header's raw data.
 
@@ -404,12 +301,6 @@ class NIfTI1Header(object):
         - For less critical inconsistencies, a InconsistentNIfTIError
           object is *returned*
         """
-        if self.magic not in (b'ni1\0', b'n+1\0'):
-            raise NotNIfTIError("missing magic string")
-
-        if self.sizeof_hdr != 348:
-            raise InconsistentNIfTIError("sizeof_hdr must be 348")
-
         datatype = self.datatype
         try:
             datatype_info = DATATYPE_INFO_DICT[datatype]
@@ -488,12 +379,9 @@ class NIfTI1Header(object):
         raw_attributes = set(self.raw.iterkeys())
         return list(type_dir | dict_attributes | raw_attributes)
 
-    def __repr__(self):
-        return "NIfTI1Header({0!r})".format(self.raw)
-
     def print_raw(self, file=sys.stdout, describe_fields=False):
         """Print raw header fields, optionally with description."""
-        for _, name, description in NIFTI1_FIELDS_DESCRIPTION:
+        for _, name, description in self.FIELDS_DESCRIPTION:
             value = self.raw[name]
             if describe_fields:
                 print("{0:14} {1!r} [{2}]".format(name, value, description),
@@ -504,10 +392,10 @@ class NIfTI1Header(object):
     def print_interpreted(self, file=sys.stdout):
         """Print interpreted header data on the supplied stream."""
         if self.extensions_present:
-            print("WARNING: unsupported NIfTI-1 extensions were detected.\n"
+            print("WARNING: unsupported NIfTI extensions were detected.\n"
                   "The data or metadata contained in  these extensions"
                   " cannot be interpreted.\n", file=file)
-            print("unsupported NIfTI-1 extensions present", file=sys.stderr)
+            print("unsupported NIfTI extensions present", file=sys.stderr)
 
         print("General dataset information", file=file)
         print("===========================", file=file)
@@ -675,7 +563,7 @@ class NIfTI1Header(object):
     def rotation_matrix_method2(self):
         """Equivalent rotation-translation matrix for method 2 quaternion data.
 
-        The calculation is as described in the reference NIfTI-1 header,
+        The calculation is as described in the reference NIfTI header,
         under the name "Method 2".
         """
         (a, b, c, d) = self.quatern_abcd
@@ -810,6 +698,135 @@ class NIfTI1Header(object):
             return INTENT_DICT[self.intent_code]
         except KeyError:
             return "{0} /* unknown intent_code */".format(self.intent_code)
+
+
+class NIfTI1Header(NIfTIHeader):
+    """In-memory representation of a NIfTI-1 header.
+
+    Can be constructed from a byte string containing a raw header. The
+    fields can then be accessed as attributes.  Specialized attributes
+    exist that produce readable, symbolic values for certain fields
+    (as opposed to raw, bit-packed values).
+
+    The header can be output to a stream using the print_raw() and
+    print_interpreted() members.
+    """
+
+    FIELDS_DESCRIPTION = NIFTI1_FIELDS_DESCRIPTION
+
+    @staticmethod
+    def _test_magic_string_version(binary_header):
+        """Test NIfTI magic string, returning NIfTI version or None."""
+        magic_field = binary_header[344:348]
+        if magic_field[0:1] != b'n' or magic_field[3:4] != b'\0':
+            return None
+        elif magic_field[1:2] not in (b'i', b'+'):
+            return None
+        elif b'1' <= magic_field[2:3] <= b'9':
+            return int(str(magic_field[2:3]))
+
+    def from_binary(self, binary_header):
+        """Load from a raw binary header."""
+        if len(binary_header) < 348:
+            raise NotNIfTIError(
+                "file too short ({0} bytes, header is at least 348 bytes)"
+                .format(len(binary_header)))
+
+        nifti_version = self._test_magic_string_version(binary_header)
+        if nifti_version is None:
+            raise NotNIfTIError("missing NIfTI magic string")
+        elif nifti_version != 1:
+            raise NotNIfTIError("unsupported NIfTI version {0}"
+                                .format(nifti_version))
+
+        self.byte_order = self._guess_byte_order(binary_header)
+
+        unpack = struct.unpack(str(self.byte_order + NIFTI1_STRUCT_FORMAT),
+                               binary_header[:348])
+        assert len(unpack) == 66
+
+        self.raw['sizeof_hdr'] = unpack[0]
+        self.raw['data_type'] = unpack[1].rstrip(b'\0')
+        self.raw['db_name'] = unpack[2].rstrip(b'\0')
+        self.raw['extents'] = unpack[3]
+        self.raw['session_error'] = unpack[4]
+        self.raw['regular'] = unpack[5]
+
+        self.raw['dim_info'] = unpack[6]
+        self.raw['dim'] = unpack[7:15]
+        assert 1 <= self.dim[0] <= 7  # Guaranteed by byte order check
+
+        self.raw['intent_p1'] = unpack[15]
+        self.raw['intent_p2'] = unpack[16]
+        self.raw['intent_p3'] = unpack[17]
+        self.raw['intent_code'] = unpack[18]
+
+        self.raw['datatype'] = unpack[19]
+        self.raw['bitpix'] = unpack[20]
+
+        self.raw['slice_start'] = unpack[21]
+        self.raw['pixdim'] = unpack[22:30]
+
+        self.raw['vox_offset'] = unpack[30]
+
+        self.raw['scl_slope'] = unpack[31]
+        self.raw['scl_inter'] = unpack[32]
+        self.raw['slice_end'] = unpack[33]
+        self.raw['slice_code'] = unpack[34]
+        self.raw['xyzt_units'] = unpack[35]
+        self.raw['cal_max'] = unpack[36]
+        self.raw['cal_min'] = unpack[37]
+        self.raw['slice_duration'] = unpack[38]
+        self.raw['toffset'] = unpack[39]
+        self.raw['glmax'] = unpack[40]
+        self.raw['glmin'] = unpack[41]
+
+        self.raw['descrip'] = unpack[42]
+        self.raw['aux_file'] = unpack[43]
+
+        self.raw['qform_code'] = unpack[44]
+        self.raw['sform_code'] = unpack[45]
+
+        self.raw['quatern_b'] = unpack[46]
+        self.raw['quatern_c'] = unpack[47]
+        self.raw['quatern_d'] = unpack[48]
+        self.raw['qoffset_x'] = unpack[49]
+        self.raw['qoffset_y'] = unpack[50]
+        self.raw['qoffset_z'] = unpack[51]
+
+        self.raw['srow_x'] = unpack[52:56]
+        self.raw['srow_y'] = unpack[56:60]
+        self.raw['srow_z'] = unpack[60:64]
+
+        self.raw['intent_name'] = unpack[64]
+
+        self.raw['magic'] = unpack[65]
+        self.onefile = (self.magic[1:2] == b'+')
+
+        binary_extender = binary_header[348:352]
+        if binary_extender:
+            self.extensions_present = (binary_extender[0:1] != b'\0')
+        else:
+            self.extensions_present = False
+
+    def check_consistency(self):
+        """Check consistency of the header's raw data.
+
+        - If a critical inconsistency is discovered, NIfTIFormatError
+          is raised
+        - For less critical inconsistencies, a InconsistentNIfTIError
+          object is *returned*
+        """
+        if self.magic not in (b'ni1\0', b'n+1\0'):
+            raise NotNIfTIError("missing magic string")
+
+        if self.sizeof_hdr != 348:
+            raise InconsistentNIfTIError("sizeof_hdr must be 348")
+
+        super(NIfTI1Header, self).check_consistency()
+
+    def __repr__(self):
+        return "NIfTI1Header({0!r})".format(self.raw)
 
 
 def print_rotation_matrix(R, file=sys.stdout):
