@@ -14,10 +14,15 @@ from __future__ import print_function, unicode_literals
 from future_builtins import zip
 
 import collections
-import os.path
-import sys
-import struct
 import exceptions
+import logging
+import math
+import os.path
+import struct
+import sys
+
+
+logging.basicConfig(format='%(message)s', level=logging.INFO)
 
 
 class NIfTIFormatError(exceptions.Exception):
@@ -249,9 +254,6 @@ XFORM_CODE_DICT = {
 }
 
 
-
-
-
 class NIfTIHeader(object):
     @staticmethod
     def _test_byte_order(binary_header, byte_order):
@@ -287,7 +289,7 @@ class NIfTIHeader(object):
         # of type collections.OrderedDict
         if isinstance(source, collections.Mapping):
             self.raw = dict(source)
-        else:
+        else:  # TODO check if this is bytes type (bytes/bytearray)
             self.raw = {}
             self.from_binary(source)
         if check_consistency:
@@ -395,7 +397,7 @@ class NIfTIHeader(object):
             print("WARNING: unsupported NIfTI extensions were detected.\n"
                   "The data or metadata contained in  these extensions"
                   " cannot be interpreted.\n", file=file)
-            print("unsupported NIfTI extensions present", file=sys.stderr)
+            logging.warn("unsupported NIfTI extensions present")
 
         print("General dataset information", file=file)
         print("===========================", file=file)
@@ -428,8 +430,13 @@ class NIfTIHeader(object):
             print("quatern_abcd: {0}".format(self.quatern_abcd), file=file)
             print("qoffset_xyz: {0}".format(self.qoffset_xyz), file=file)
 
-            print("Equivalent rotation matrix / offset:", file=file)
-            print_rotation_matrix(self.rotation_matrix_method2, file=file)
+            if not self.qfac_is_valid:
+                print("WARNING: the following matrix could be wrong because "
+                      "the value of qfac is invalid, assuming qfac = 1",
+                      file=file)
+                logging.warn("the transformation matrix")
+            print("Equivalent affine matrix:", file=file)
+            print_affine_matrix(self.affine_matrix_method2, file=file)
 
         if self.sform_code > 0:
             print(file=file)
@@ -438,8 +445,8 @@ class NIfTIHeader(object):
             print("sform_code = {0}".format(self.readable_sform_code),
                   file=file)
 
-            print("Rotation matrix / offset:", file=file)
-            print_rotation_matrix(self.rotation_matrix_method3, file=file)
+            print("Affine matrix:", file=file)
+            print_affine_matrix(self.affine_matrix_method3, file=file)
 
         if self.intent_code or self.intent_name:
             print(file=file)
@@ -475,15 +482,16 @@ class NIfTIHeader(object):
                 print("slice_start = {0}".format(self.slice_start), file=file)
                 print("slice_end = {0}".format(self.slice_end), file=file)
 
-        def print_misc_title(already_printed=[]):
+        misc_title = {"printed": False}
+        def print_misc_title():
             """Print the title as needed, at most once."""
-            # The (mutable) list printed_already evaluates to false
-            # only if it is empty
-            if not already_printed:
+            # Work around the absence of a "nonlocal" keyword in Python2 by
+            # using a dictionary
+            if not misc_title["printed"]:
                 print(file=file)
                 print("Miscellaneous", file=file)
                 print("=============", file=file)
-                already_printed.append(True)
+                misc_title["printed"] = True
 
         if self.descrip:
             print_misc_title()
@@ -529,29 +537,36 @@ class NIfTIHeader(object):
     def qfac(self):
         """Value of qfac (used in method 2)."""
         raw_qfac = self.pixdim[0]
-        if raw_qfac == 0.0 or raw_qfac == 1.0:
-            return 1
-        elif raw_qfac == -1.0:
+        if raw_qfac == -1.0:
             return -1
         else:
             return 1
 
     @property
+    def qfac_is_valid(self):
+        """Assert if the value of qfac is stored in a valid way."""
+        return self.pixdim[0] in (1.0, -1.0)
+
+    @property
     def readable_qfac(self):
         """Readable value of qfac."""
-        if self.pixdim[0] in (0.0, 1.0, -1.0):
+        if self.qfac_is_valid:
             return str(self.qfac)
         else:
-            return "1 /* assumed, invalid pixdim[0] = {0} */".format(raw_qfac)
+            return ("1 /* assumed, invalid pixdim[0] = {0} */"
+                    .format(self.pixdim[0]))
 
     @property
     def quatern_abcd(self):
         """Quaternion values (a, b, c, d)."""
-        import math
         b = self.quatern_b
         c = self.quatern_c
         d = self.quatern_d
-        a = math.sqrt(max(1.0 - (b * b + c * c + d * d), 0.))
+        a2 = 1.0 - (b * b + c * c + d * d)
+        if a2 >= 0:
+            a = math.sqrt(a2)
+        else:
+            a = float("NaN")
         return (a, b, c, d)
 
     @property
@@ -560,8 +575,8 @@ class NIfTIHeader(object):
         return (self.qoffset_x, self.qoffset_y, self.qoffset_z)
 
     @property
-    def rotation_matrix_method2(self):
-        """Equivalent rotation-translation matrix for method 2 quaternion data.
+    def affine_matrix_method2(self):
+        """Equivalent affine matrix for method 2 quaternion data.
 
         The calculation is as described in the reference NIfTI header,
         under the name "Method 2".
@@ -587,8 +602,8 @@ class NIfTIHeader(object):
         return (row_x, row_y, row_z)
 
     @property
-    def rotation_matrix_method3(self):
-        """Rotation matrix of method 3."""
+    def affine_matrix_method3(self):
+        """Affine matrix of method 3."""
         return (self.srow_x, self.srow_y, self.srow_z)
 
     @property
@@ -658,12 +673,12 @@ class NIfTIHeader(object):
                 except KeyError:
                     yield "0x{0:02X} /* invalid time unit */".format(time_unit)
             if self.xyzt_units & ~0x3F:
-                yield ("0x{0:02X} /* invalid xyzt_unit bits */"
+                yield ("0x{0:X} /* invalid xyzt_unit bits */"
                        .format(self.xyzt_units))
 
     @property
     def space_unit_text(self):
-        """Unit along space dimensions as a SI abbreviationx."""
+        """Unit along space dimensions as a SI abbreviation."""
         return SPACE_UNIT_TEXT_DICT.get(self.xyzt_units & 0x07, "")
 
     @property
@@ -681,7 +696,7 @@ class NIfTIHeader(object):
         if self.slice_dim:
             yield "({0} << 4) /* slice */".format(self.slice_dim)
         if self.dim_info & ~0x7F:
-            yield "0x{0:02X} /* unknown bit */"
+            yield "0x{0:X} /* invalid bits */"
 
     @property
     def readable_dim_info(self):
@@ -829,8 +844,9 @@ class NIfTI1Header(NIfTIHeader):
         return "NIfTI1Header({0!r})".format(self.raw)
 
 
-def print_rotation_matrix(R, file=sys.stdout):
-    """Print a rotation-translation matrix to the given file."""
+def print_affine_matrix(R, file=sys.stdout):
+    """Print an affine matrix to the given file."""
+    # TODO handle double precision of NIfTI-2 matrices
     print("{0:8.5f} {1:8.5f} {2:8.5f} {3:8.3f}".format(*R[0]), file=file)
     print("{0:8.5f} {1:8.5f} {2:8.5f} {3:8.3f}".format(*R[1]), file=file)
     print("{0:8.5f} {1:8.5f} {2:8.5f} {3:8.3f}".format(*R[2]), file=file)
