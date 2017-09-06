@@ -37,7 +37,7 @@ class InconsistentNIfTIError(NIfTIFormatError):
 
 # These tables represent static data from the official definition of
 # NIfTI-1 <http://nifti.nimh.nih.gov/pub/dist/src/niftilib/nifti1.h>
-nifti1_fields_description = [
+NIFTI1_FIELDS_DESCRIPTION = [
     ('i', 'sizeof_hdr', "MUST be 348"),
     ('10s', 'data_type', "++UNUSED++"),
     ('18s', 'db_name', "++UNUSED++"),
@@ -84,15 +84,15 @@ nifti1_fields_description = [
 ]
 
 # Concatenate all field descriptions in struct module syntax
-nifti1_struct_format = "".join(next(zip(*nifti1_fields_description)))
+NIFTI1_STRUCT_FORMAT = "".join(next(zip(*NIFTI1_FIELDS_DESCRIPTION)))
 # The call to str() is necessary in Python 2.6 because struct does not
 # accept unicode strings
-assert struct.calcsize(str('=' + nifti1_struct_format)) == 348
+assert struct.calcsize(str('=' + NIFTI1_STRUCT_FORMAT)) == 348
 
 
 # These tables represent static data from the official definition of
 # NIfTI-2 <https://nifti.nimh.nih.gov/pub/dist/doc/nifti2.h>
-nifti2_fields_description = [
+NIFTI2_FIELDS_DESCRIPTION = [
     ('i', 'sizeof_hdr', "MUST be 540"),
     ('8s', 'magic', 'MUST be valid signature'),
     ('h', 'datatype', "Defines data type"),
@@ -133,13 +133,13 @@ nifti2_fields_description = [
 ]
 
 # Concatenate all field descriptions in struct module syntax
-nifti2_struct_format = "".join(next(zip(*nifti2_fields_description)))
+NIFTI2_STRUCT_FORMAT = "".join(next(zip(*NIFTI2_FIELDS_DESCRIPTION)))
 # The call to str() is necessary in Python 2.6 because struct does not
 # accept unicode strings
-assert struct.calcsize(str('=' + nifti2_struct_format)) == 540
+assert struct.calcsize(str('=' + NIFTI2_STRUCT_FORMAT)) == 540
 
 
-intent_dict = {
+INTENT_DICT = {
     0: 'NIFTI_INTENT_NONE',
     2: 'NIFTI_INTENT_CORREL',
     3: 'NIFTI_INTENT_TTEST',
@@ -182,7 +182,7 @@ intent_dict = {
     2005: 'NIFTI_INTENT_SHAPE',
 }
 
-datatype_info_dict = {
+DATATYPE_INFO_DICT = {
     0: ('', None),
     1: ('DT_BINARY', 1),
     2: ('NIFTI_TYPE_UINT8', 8),
@@ -204,7 +204,7 @@ datatype_info_dict = {
     2304: ('NIFTI_TYPE_RGBA32', 32),
 }
 
-xyzt_units_dict = {
+XYZT_UNITS_DICT = {
     0: 'NIFTI_UNITS_UNKNOWN',
     1: 'NIFTI_UNITS_METER',
     2: 'NIFTI_UNITS_MM',
@@ -217,13 +217,13 @@ xyzt_units_dict = {
     48: 'NIFTI_UNITS_RADS',
 }
 
-space_unit_text_dict = {
+SPACE_UNIT_TEXT_DICT = {
     1: " m",
     2: " mm",
     3: " µm",
 }
 
-time_unit_text_dict = {
+TIME_UNIT_TEXT_DICT = {
     8: " s",
     16: " ms",
     24: " µs",
@@ -232,7 +232,7 @@ time_unit_text_dict = {
     48: " rad",
 }
 
-slice_code_dict = {
+SLICE_CODE_DICT = {
     0: 'NIFTI_SLICE_UNKNOWN',
     1: 'NIFTI_SLICE_SEQ_INC',
     2: 'NIFTI_SLICE_SEQ_DEC',
@@ -240,7 +240,7 @@ slice_code_dict = {
     4: 'NIFTI_SLICE_ALT_DEC',
 }
 
-xform_code_dict = {
+XFORM_CODE_DICT = {
     0: 'NIFTI_XFORM_UNKNOWN',
     1: 'NIFTI_XFORM_SCANNER_ANAT',
     2: 'NIFTI_XFORM_ALIGNED_ANAT',
@@ -328,7 +328,7 @@ class NIfTI1Header(object):
 
         self.byte_order = self._guess_byte_order(binary_header)
 
-        unpack = struct.unpack(str(self.byte_order + nifti1_struct_format),
+        unpack = struct.unpack(str(self.byte_order + NIFTI1_STRUCT_FORMAT),
                                binary_header[:348])
         assert len(unpack) == 66
 
@@ -412,7 +412,7 @@ class NIfTI1Header(object):
 
         datatype = self.datatype
         try:
-            datatype_info = datatype_info_dict[datatype]
+            datatype_info = DATATYPE_INFO_DICT[datatype]
         except KeyError:
             raise InconsistentNIfTIError("unknown datatype {0}"
                                          .format(datatype))
@@ -439,7 +439,7 @@ class NIfTI1Header(object):
                 "vox_offset should not be less than 352 (is {0})"
                 .format(self.vox_offset))
 
-        if self.intent_code not in intent_dict:
+        if self.intent_code not in INTENT_DICT:
             return InconsistentNIfTIError("unknown intent_code value {0}"
                                           .format(self.intent_code))
         # Based on the intent code, other checks could be done
@@ -493,7 +493,7 @@ class NIfTI1Header(object):
 
     def print_raw(self, file=sys.stdout, describe_fields=False):
         """Print raw header fields, optionally with description."""
-        for _, name, description in nifti1_fields_description:
+        for _, name, description in NIFTI1_FIELDS_DESCRIPTION:
             value = self.raw[name]
             if describe_fields:
                 print("{0:14} {1!r} [{2}]".format(name, value, description),
@@ -625,7 +625,7 @@ class NIfTI1Header(object):
     def readable_qform_code(self):
         """Readable value of the qform_code field."""
         try:
-            return xform_code_dict[self.qform_code]
+            return XFORM_CODE_DICT[self.qform_code]
         except KeyError:
             return "{0} /* invalid qform_code */".format(self.qform_code)
 
@@ -633,7 +633,7 @@ class NIfTI1Header(object):
     def readable_sform_code(self):
         """Readable value of the sform_code field."""
         try:
-            return xform_code_dict[self.sform_code]
+            return XFORM_CODE_DICT[self.sform_code]
         except KeyError:
             return "{0} /* invalid sform_code */".format(self.sform_code)
 
@@ -716,7 +716,7 @@ class NIfTI1Header(object):
     def readable_slice_code(self):
         """Readable flag for the slice_code field."""
         try:
-            return slice_code_dict[self.slice_code]
+            return SLICE_CODE_DICT[self.slice_code]
         except KeyError:
             return "{0} /* unknown slice code */".format(self.slice_code)
 
@@ -724,7 +724,7 @@ class NIfTI1Header(object):
     def readable_datatype(self):
         """Readable flag for the datatype field."""
         try:
-            return datatype_info_dict[self.datatype][0]
+            return DATATYPE_INFO_DICT[self.datatype][0]
         except KeyError:
             return "{0} /* unknown datatype value */".format(self.datatype)
 
@@ -748,19 +748,19 @@ class NIfTI1Header(object):
     def readable_xyzt_units(self):
         """Readable value for the xyzt_units field."""
         if self.xyzt_units == 0x00:
-            yield xyzt_units_dict[0]
+            yield XYZT_UNITS_DICT[0]
         else:
             space_unit = self.xyzt_units & 0x07
             time_unit = self.xyzt_units & 0x38
             if space_unit:
                 try:
-                    yield xyzt_units_dict[space_unit]
+                    yield XYZT_UNITS_DICT[space_unit]
                 except KeyError:
                     yield ("0x{0:02X} /* invalid space unit */"
                            .format(space_unit))
             if time_unit:
                 try:
-                    yield xyzt_units_dict[time_unit]
+                    yield XYZT_UNITS_DICT[time_unit]
                 except KeyError:
                     yield "0x{0:02X} /* invalid time unit */".format(time_unit)
             if self.xyzt_units & ~0x3F:
@@ -770,12 +770,12 @@ class NIfTI1Header(object):
     @property
     def space_unit_text(self):
         """Unit along space dimensions as a SI abbreviationx."""
-        return space_unit_text_dict.get(self.xyzt_units & 0x07, "")
+        return SPACE_UNIT_TEXT_DICT.get(self.xyzt_units & 0x07, "")
 
     @property
     def time_unit_text(self):
         """Unit along time dimension as a SI abbreviation."""
-        return time_unit_text_dict.get(self.xyzt_units & 0x38, "")
+        return TIME_UNIT_TEXT_DICT.get(self.xyzt_units & 0x38, "")
 
     @property
     def separate_dim_info(self):
@@ -801,7 +801,7 @@ class NIfTI1Header(object):
     def readable_intent_code(self):
         """Readable flag for the intent_code field."""
         try:
-            return intent_dict[self.intent_code]
+            return INTENT_DICT[self.intent_code]
         except KeyError:
             return "{0} /* unknown intent_code */".format(self.intent_code)
 
