@@ -37,7 +37,7 @@ class InconsistentNIfTI1Error(NIfTI1FormatError):
 
 # These tables represent static data from the official definition of
 # NIfTI-1 <http://nifti.nimh.nih.gov/pub/dist/src/niftilib/nifti1.h>
-header_fields_description = [
+nifti1_fields_description = [
     ('i', 'sizeof_hdr', "MUST be 348"),
     ('10s', 'data_type', "++UNUSED++"),
     ('18s', 'db_name', "++UNUSED++"),
@@ -84,10 +84,60 @@ header_fields_description = [
 ]
 
 # Concatenate all field descriptions in struct module syntax
-header_struct_format = "".join(next(zip(*header_fields_description)))
+nifti1_struct_format = "".join(next(zip(*nifti1_fields_description)))
 # The call to str() is necessary in Python 2.6 because struct does not
 # accept unicode strings
-assert struct.calcsize(str('=' + header_struct_format)) == 348
+assert struct.calcsize(str('=' + nifti1_struct_format)) == 348
+
+
+# These tables represent static data from the official definition of
+# NIfTI-2 <https://nifti.nimh.nih.gov/pub/dist/doc/nifti2.h>
+nifti2_fields_description = [
+    ('i', 'sizeof_hdr', "MUST be 540"),
+    ('8s', 'magic', 'MUST be valid signature'),
+    ('h', 'datatype', "Defines data type"),
+    ('h', 'bitpix', "Number bits/voxel"),
+    ('8q', 'dim', "Data array dimensions"),
+    ('d', 'intent_p1', "1st intent parameter"),
+    ('d', 'intent_p2', "2nd intent parameter"),
+    ('d', 'intent_p3', "3rd intent parameter"),
+    ('8d', 'pixdim', "Grid spacings"),
+    ('q', 'vox_offset', "Offset into .nii file"),
+    ('d', 'scl_slope', "Data scaling: slope"),
+    ('d', 'scl_inter', "Data scaling: offset"),
+    ('d', 'cal_max', "Max display intensity"),
+    ('d', 'cal_min', "Min display intensity"),
+    ('d', 'slice_duration', "Time for 1 slice"),
+    ('d', 'toffset', "Time axis shift"),
+    ('q', 'slice_start', "First slice index"),
+    ('q', 'slice_end', "Last slice index"),
+    ('80s', 'descrip', "any text you like"),
+    ('24s', 'aux_file', "auxiliary filename"),
+    ('i', 'qform_code', "NIFTIXFORM code"),
+    ('i', 'sform_code', "NIFTIXFORM code"),
+    ('d', 'quatern_b', "Quaternion b param"),
+    ('d', 'quatern_c', "Quaternion c param"),
+    ('d', 'quatern_d', "Quaternion d param"),
+    ('d', 'qoffset_x', "Quaternion x shift"),
+    ('d', 'qoffset_y', "Quaternion y shift"),
+    ('d', 'qoffset_z', "Quaternion z shift"),
+    ('4d', 'srow_x', "1st row affine transform"),
+    ('4d', 'srow_y', "2nd row affine transform"),
+    ('4d', 'srow_z', "3rd row affine transform"),
+    ('i', 'slice_code', "Slice timing order"),
+    ('i', 'xyzt_units', "Units of pixdim[1..4]"),
+    ('i', 'intent_code', "NIFTI_INTENT_* code"),
+    ('16s', 'intent_name', "'name' or meaning of data"),
+    ('b', 'dim_info', "MRI slice ordering"),
+    ('15s', 'unused_str', "unused, filled with \\0"),
+]
+
+# Concatenate all field descriptions in struct module syntax
+nifti2_struct_format = "".join(next(zip(*nifti2_fields_description)))
+# The call to str() is necessary in Python 2.6 because struct does not
+# accept unicode strings
+assert struct.calcsize(str('=' + nifti2_struct_format)) == 540
+
 
 intent_dict = {
     0: 'NIFTI_INTENT_NONE',
@@ -278,7 +328,7 @@ class NIfTI1Header(object):
 
         self.byte_order = self._guess_byte_order(binary_header)
 
-        unpack = struct.unpack(str(self.byte_order + header_struct_format),
+        unpack = struct.unpack(str(self.byte_order + nifti1_struct_format),
                                binary_header[:348])
         assert len(unpack) == 66
 
@@ -443,7 +493,7 @@ class NIfTI1Header(object):
 
     def print_raw(self, file=sys.stdout, describe_fields=False):
         """Print raw header fields, optionally with description."""
-        for _, name, description in header_fields_description:
+        for _, name, description in nifti1_fields_description:
             value = self.raw[name]
             if describe_fields:
                 print("{0:14} {1!r} [{2}]".format(name, value, description),
