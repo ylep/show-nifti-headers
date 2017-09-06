@@ -255,13 +255,6 @@ XFORM_CODE_DICT = {
 
 
 class NIfTIHeader(object):
-    @staticmethod
-    def _test_byte_order(binary_header, byte_order):
-        """Test if a binary header uses the given byte order ('<' or '>')."""
-        dim0_binary = binary_header[40:42]
-        dim0 = struct.unpack(str(byte_order + 'h'), dim0_binary)[0]
-        return 1 <= dim0 <= 7
-
     @classmethod
     def _guess_byte_order(cls, binary_header):
         """Guess the byte order of a raw binary NIfTI header.
@@ -728,17 +721,25 @@ class NIfTI1Header(NIfTIHeader):
     """
 
     FIELDS_DESCRIPTION = NIFTI1_FIELDS_DESCRIPTION
+    STRUCT_FORMAT = NIFTI1_STRUCT_FORMAT
 
     @staticmethod
-    def _test_magic_string_version(binary_header):
+    def _test_magic_string_version(magic_field):
         """Test NIfTI magic string, returning NIfTI version or None."""
-        magic_field = binary_header[344:348]
         if magic_field[0:1] != b'n' or magic_field[3:4] != b'\0':
             return None
-        elif magic_field[1:2] not in (b'i', b'+'):
+        if magic_field[1:2] not in (b'i', b'+'):
             return None
-        elif b'1' <= magic_field[2:3] <= b'9':
+        if b'1' <= magic_field[2:3] <= b'9':
             return int(str(magic_field[2:3]))
+        # else return None is implied
+
+    @staticmethod
+    def _test_byte_order(binary_header, byte_order):
+        """Test if a binary header uses the given byte order ('<' or '>')."""
+        dim0_binary = binary_header[40:42]
+        dim0 = struct.unpack(str(byte_order + 'h'), dim0_binary)[0]
+        return 1 <= dim0 <= 7
 
     def from_binary(self, binary_header):
         """Load from a raw binary header."""
@@ -747,16 +748,16 @@ class NIfTI1Header(NIfTIHeader):
                 "file too short ({0} bytes, header is at least 348 bytes)"
                 .format(len(binary_header)))
 
-        nifti_version = self._test_magic_string_version(binary_header)
+        nifti_version = self._test_magic_string_version(binary_header[344:348])
         if nifti_version is None:
-            raise NotNIfTIError("missing NIfTI magic string")
+            raise NotNIfTIError("missing NIfTI-1 magic string")
         elif nifti_version != 1:
             raise NotNIfTIError("unsupported NIfTI version {0}"
                                 .format(nifti_version))
 
         self.byte_order = self._guess_byte_order(binary_header)
 
-        unpack = struct.unpack(str(self.byte_order + NIFTI1_STRUCT_FORMAT),
+        unpack = struct.unpack(str(self.byte_order + self.STRUCT_FORMAT),
                                binary_header[:348])
         assert len(unpack) == 66
 
@@ -796,8 +797,8 @@ class NIfTI1Header(NIfTIHeader):
         self.raw['glmax'] = unpack[40]
         self.raw['glmin'] = unpack[41]
 
-        self.raw['descrip'] = unpack[42]
-        self.raw['aux_file'] = unpack[43]
+        self.raw['descrip'] = unpack[42].rstrip('\0')
+        self.raw['aux_file'] = unpack[43].rstrip('\0')
 
         self.raw['qform_code'] = unpack[44]
         self.raw['sform_code'] = unpack[45]
@@ -813,7 +814,7 @@ class NIfTI1Header(NIfTIHeader):
         self.raw['srow_y'] = unpack[56:60]
         self.raw['srow_z'] = unpack[60:64]
 
-        self.raw['intent_name'] = unpack[64]
+        self.raw['intent_name'] = unpack[64].rstrip('\0')
 
         self.raw['magic'] = unpack[65]
         self.onefile = (self.magic[1:2] == b'+')
