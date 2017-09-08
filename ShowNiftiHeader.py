@@ -300,14 +300,21 @@ class NiftiHeader(object):
 
     def read_binary_extender(self, binary_extender):
         if binary_extender:
-            self.extensions_present = (binary_extender[0:1] != b'\0')
+            return (binary_extender[0:1] != b'\0')
         else:
-            self.extensions_present = False
+            return False
 
     def list_inconsistencies(self):
         """List the inconsistencies of the header's raw data."""
+        self.check_format()
+
         if not 1 <= self.dim[0] <= 7:
             yield InconsistentNiftiError("dim[0] must be in range 1..7")
+
+        if self.onefile and not self.vox_offset >= self.TOTAL_HEADER_SIZE:
+            yield InconsistentNiftiError(
+                "vox_offset should be {0} or more (is {1})"
+                .format(self.TOTAL_HEADER_SIZE, self.vox_offset))
 
         datatype = self.datatype
         try:
@@ -342,14 +349,9 @@ class NiftiHeader(object):
         # (e.g. dimensionality)
 
     @property
-    def data_type(self):
-        """The data_type field as a byte string."""
-        return self.raw['data_type'].rstrip(b'\0')
-
-    @property
-    def db_name(self):
-        """The db_name field as a byte string."""
-        return self.raw['db_name'].rstrip(b'\0')
+    def nifti_version(self):
+        """Version of the NIfTI format used."""
+        return self._test_magic_string_version(self.raw['magic'])
 
     @property
     def vox_offset(self):
@@ -396,12 +398,22 @@ class NiftiHeader(object):
 
     def print_interpreted(self, file=sys.stdout):
         """Print interpreted header data on the supplied stream."""
-        if self.extensions_present:
-            print("WARNING: unsupported NIfTI extensions were detected.\n"
-                  "The data or metadata contained in  these extensions"
-                  " cannot be interpreted.\n", file=file)
-            logging.warn("unsupported NIfTI extensions present")
+        print("General file information", file=file)
+        print("===========================", file=file)
+        print("NIfTI version: {0}".format(self.nifti_version), file=file)
+        if self.onefile:
+            print("Data is stored in this file", file=file)
+            if self.vox_offset > self.TOTAL_HEADER_SIZE:
+                print("{0} bytes of padding and/or extensions exist after "
+                      "the header".format(self.vox_offset
+                                          - self.TOTAL_HEADER_SIZE))
+        else:
+            print("Data is stored in an associated .img file", file=file)
+            if self.vox_offset != 0:
+                print("Data is stored at {0} bytes offset"
+                      .format(self.vox_offset), file=file)
 
+        print(file=file)
         print("General dataset information", file=file)
         print("===========================", file=file)
         print("datatype = {0}".format(self.readable_datatype), file=file)
@@ -518,7 +530,11 @@ class NiftiHeader(object):
             print("cal_min = {0}".format(self.cal_min), file=file)
             print("cal_max = {0}".format(self.cal_max), file=file)
 
-        # Unused ANALYZE 7.5 fields data_type and db_name are not displayed
+        if self.extensions_present:
+            print("WARNING: unsupported NIfTI extensions were detected.\n"
+                  "The data or metadata contained in these extensions"
+                  " cannot be interpreted.\n", file=file)
+            logging.warn("unsupported NIfTI extensions are present")
 
     @property
     def readable_qform_code(self):
@@ -732,6 +748,7 @@ class Nifti1Header(NiftiHeader):
 
     FIELDS_DESCRIPTION = NIFTI1_FIELDS_DESCRIPTION
     STRUCT_FORMAT = NIFTI1_STRUCT_FORMAT
+    TOTAL_HEADER_SIZE = 352
 
     @staticmethod
     def _test_byte_order(binary_header, byte_order):
@@ -818,9 +835,8 @@ class Nifti1Header(NiftiHeader):
         self.raw['magic'] = unpack[65]
         self.onefile = (self.magic[1:2] == b'+')
 
-        if self.vox_offset >= 352 or not self.onefile:
-            binary_extender = binary_header[348:352]
-            self.read_binary_extender(binary_extender)
+        binary_extender = binary_header[348:352]
+        self.extensions_present = self.read_binary_extender(binary_extender)
 
     def check_format(self):
         """Check that the header satisfies the basic requirements of NIfTI-2"""
@@ -828,17 +844,6 @@ class Nifti1Header(NiftiHeader):
             raise NotNiftiError("invalid magic string {0}".format(self.magic))
         if self.sizeof_hdr != 348:
             raise NotNiftiError("sizeof_hdr must be 348")
-
-    def list_inconsistencies(self):
-        """List inconsistencies of the header's raw data."""
-        self.check_format()
-        for i in super(Nifti1Header, self).list_inconsistencies():
-            yield i
-
-        if self.onefile and not self.vox_offset >= 352:
-            yield InconsistentNiftiError(
-                "vox_offset should be 352 or more (is {0})"
-                .format(self.vox_offset))
 
     def __repr__(self):
         return "Nifti1Header({0!r})".format(self.raw)
@@ -858,6 +863,7 @@ class Nifti2Header(NiftiHeader):
 
     FIELDS_DESCRIPTION = NIFTI2_FIELDS_DESCRIPTION
     STRUCT_FORMAT = NIFTI2_STRUCT_FORMAT
+    TOTAL_HEADER_SIZE = 544
 
     @staticmethod
     def _test_byte_order(binary_header, byte_order):
@@ -927,9 +933,8 @@ class Nifti2Header(NiftiHeader):
 
         self.onefile = (self.magic[1:2] == b'+')
 
-        if self.vox_offset >= 544 or not self.onefile:
-            binary_extender = binary_header[540:544]
-            self.read_binary_extender(binary_extender)
+        binary_extender = binary_header[540:544]
+        self.extensions_present = self.read_binary_extender(binary_extender)
 
     def check_format(self):
         """Check that the header satisfies the basic requirements of NIfTI-2"""
@@ -944,29 +949,9 @@ class Nifti2Header(NiftiHeader):
         for i in super(Nifti2Header, self).list_inconsistencies():
             yield i
 
-        if self.raw.unused_str != '':
+        if self.unused_str != '':
             yield InconsistentNiftiError(
                 "unused_str should be set to all zero bytes")
-
-        if self.onefile and not self.vox_offset >= 544:
-            yield InconsistentNiftiError(
-                "vox_offset should be 544 or more (is {0})"
-                .format(self.vox_offset))
-
-    def list_inconsistencies(self):
-        """List the inconsistencies of the header's raw data."""
-        self.check_format()
-        for i in super(Nifti2Header, self).list_inconsistencies():
-            yield i
-
-        if self.raw.unused_str != '':
-            yield InconsistentNiftiError(
-                "unused_str should be set to all zero bytes")
-
-        if self.onefile and not self.vox_offset >= 544:
-            yield InconsistentNiftiError(
-                "vox_offset should be 544 or more (is {0})"
-                .format(self.vox_offset))
 
     def __repr__(self):
         return "Nifti2Header({0!r})".format(self.raw)
