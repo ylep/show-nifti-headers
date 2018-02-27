@@ -966,8 +966,8 @@ def print_affine_matrix(R, file=sys.stdout):
 
 
 def read_nifti_header(binary_header):
-    sizeof_hdr_le = struct.unpack("<i", binary_header[:4])[0]
-    sizeof_hdr_be = struct.unpack(">i", binary_header[:4])[0]
+    sizeof_hdr_le = struct.unpack(str("<i"), binary_header[:4])[0]
+    sizeof_hdr_be = struct.unpack(str(">i"), binary_header[:4])[0]
     if sizeof_hdr_le == 348 or sizeof_hdr_be == 348:
         if binary_header[344:348] in (b'ni1\0', b'n+1\0'):
             return Nifti1Header(binary_header)
