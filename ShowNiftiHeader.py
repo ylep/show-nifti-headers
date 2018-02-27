@@ -255,6 +255,9 @@ XFORM_CODE_DICT = {
 
 
 class NiftiHeader(object):
+
+    EXTENSION_SIZE_MULTIPLE = 16
+
     @classmethod
     def _guess_byte_order(cls, binary_header):
         """Guess the byte order of a raw binary NIfTI header.
@@ -298,9 +301,10 @@ class NiftiHeader(object):
             self.from_binary(source)
         self.check_format()
 
-    def read_binary_extender(self, binary_extender):
-        if binary_extender:
-            return (binary_extender[0:1] != b'\0')
+    @property
+    def extensions_present(self):
+        if self.raw["extension"]:
+            return (self.raw["extension"][0:1] != b'\0')
         else:
             return False
 
@@ -347,6 +351,12 @@ class NiftiHeader(object):
                 "unknown intent_code value {0}".format(self.intent_code))
         # Based on the intent code, other checks could be done
         # (e.g. dimensionality)
+
+        if (self.extensions_present
+            and self.vox_offset < (self.TOTAL_HEADER_SIZE
+                                   + self.EXTENSION_SIZE_MULTIPLE)):
+            yield InconsistentNiftiError(
+                "extensions are declared but cannot fit after the header")
 
     @property
     def nifti_version(self):
@@ -395,6 +405,9 @@ class NiftiHeader(object):
                       file=file)
             else:
                 print("{0:14} {1!r}".format(name, value), file=file)
+        print("{0:14} {1!r}".format("extension",
+                                    self.raw["extension"]),
+              file=file)
 
     def print_interpreted(self, file=sys.stdout):
         """Print interpreted header data on the supplied stream."""
@@ -835,8 +848,7 @@ class Nifti1Header(NiftiHeader):
         self.raw['magic'] = unpack[65]
         self.onefile = (self.magic[1:2] == b'+')
 
-        binary_extender = binary_header[348:352]
-        self.extensions_present = self.read_binary_extender(binary_extender)
+        self.raw['extension'] = binary_header[348:352]
 
     def check_format(self):
         """Check that the header satisfies the basic requirements of NIfTI-2"""
@@ -933,8 +945,7 @@ class Nifti2Header(NiftiHeader):
 
         self.onefile = (self.magic[1:2] == b'+')
 
-        binary_extender = binary_header[540:544]
-        self.extensions_present = self.read_binary_extender(binary_extender)
+        self.raw['extension'] = binary_header[540:544]
 
     def check_format(self):
         """Check that the header satisfies the basic requirements of NIfTI-2"""
