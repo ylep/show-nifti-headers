@@ -1,7 +1,7 @@
 #! /usr/bin/env python2
 # -*- coding: utf-8 -*-
 
-"""Print the header of a NIFTI-1 file in human-readable form.
+"""Print the header of a NIfTI file in human-readable form.
 
 Gzip-compressed files are recognized if their name ends in '.gz'.
 Standard input is used if the file name is a single hyphen '-'.
@@ -529,7 +529,7 @@ class NiftiHeader(object):
             print_misc_title()
             print("aux_file = {0!r}".format(self.aux_file), file=file)
 
-        if self.scl_slope and (self.scl_slope != 1.0 or self.scl_inter != 0):
+        if self.scl_slope != 0:
             print_misc_title()
             print("scl_slope = {0}".format(self.scl_slope), file=file)
             print("scl_inter = {0}".format(self.scl_inter), file=file)
