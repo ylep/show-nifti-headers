@@ -1061,6 +1061,9 @@ def main():
                 print("- {0}".format(i))
 
         sys.stdout.close()
+
+        if inconsistencies:
+            sys.exit(3)
     except IOError as exc:
         sys.exit("error printing output: {0}".format(exc))
 
