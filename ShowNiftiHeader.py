@@ -261,7 +261,7 @@ NIFTI1_EXTENSION_HEADER_LENGTH = 8
 NIFTI1_EXTENSION_HEADER_FORMAT = "ii"
 NIFTI1_EXTENSION_SIZE_MULTIPLE = 16
 
-# Source: https://github.com/NIFTI-Imaging/nifti_clib/blob/53f295cf78963058347757bbbae9584a6a8feede/niftilib/nifti1_io.h
+# Source: https://github.com/NIFTI-Imaging/nifti_clib/blob/53f295cf78963058347757bbbae9584a6a8feede/niftilib/nifti1_io.h  # noqa: E501
 NIFTI1_EXTENSION_CODE_NAMES = {
     0: 'NIFTI_ECODE_IGNORE',
     2: 'NIFTI_ECODE_DICOM',
@@ -841,8 +841,8 @@ class NiftiHeader(object):
                 if self.onefile and (pos + esize > self.vox_offset):
                     self._extension_inconsistencies.append(
                         InconsistentNiftiError(
-                            "invalid extension: esize is too large"
-                            .format(esize, NIFTI1_EXTENSION_SIZE_MULTIPLE))
+                            "invalid extension: esize is too large ({0})"
+                            .format(esize))
                     )
                     return
                 elif esize % NIFTI1_EXTENSION_SIZE_MULTIPLE != 0:
