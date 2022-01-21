@@ -1,4 +1,4 @@
-#! /usr/bin/env python2
+#! /usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 """Print the header of a NIfTI file in human-readable form.
@@ -10,11 +10,7 @@ Standard input is used if the file name is a single hyphen '-'.
 # This program is based on the NIfTI-1.1 specification as described on
 # http://nifti.nimh.nih.gov/nifti-1
 
-from __future__ import print_function, unicode_literals
-from future_builtins import zip
-
 import collections
-import exceptions
 import logging
 import math
 import os.path
@@ -25,7 +21,7 @@ import sys
 logging.basicConfig(format='%(message)s', level=logging.INFO)
 
 
-class NiftiFormatError(exceptions.Exception):
+class NiftiFormatError(Exception):
     """Exception signalling errors encountered during NIfTI file parsing"""
     pass
 
@@ -91,9 +87,7 @@ NIFTI1_HEADER_SIZE = 348
 
 # Concatenate all field descriptions in struct module syntax
 NIFTI1_STRUCT_FORMAT = "".join(next(zip(*NIFTI1_FIELDS_DESCRIPTION)))
-# The call to str() is necessary in Python 2.6 because struct does not
-# accept unicode strings
-assert struct.calcsize(str('=' + NIFTI1_STRUCT_FORMAT)) == NIFTI1_HEADER_SIZE
+assert struct.calcsize('=' + NIFTI1_STRUCT_FORMAT) == NIFTI1_HEADER_SIZE
 
 
 # These tables represent static data from the official definition of
@@ -141,9 +135,7 @@ NIFTI2_HEADER_SIZE = 540
 
 # Concatenate all field descriptions in struct module syntax
 NIFTI2_STRUCT_FORMAT = "".join(next(zip(*NIFTI2_FIELDS_DESCRIPTION)))
-# The call to str() is necessary in Python 2.6 because struct does not
-# accept unicode strings
-assert struct.calcsize(str('=' + NIFTI2_STRUCT_FORMAT)) == NIFTI2_HEADER_SIZE
+assert struct.calcsize('=' + NIFTI2_STRUCT_FORMAT) == NIFTI2_HEADER_SIZE
 
 
 INTENT_DICT = {
@@ -322,7 +314,7 @@ class NiftiHeader(object):
         if magic_field[1:2] not in (b'i', b'+'):
             return None
         if b'1' <= magic_field[2:3] <= b'9':
-            return int(str(magic_field[2:3]))
+            return int(magic_field[2:3].decode())
         # else return None is implied
 
     def __init__(self, source, file=None):
@@ -338,10 +330,8 @@ class NiftiHeader(object):
         """
         self._raw_extensions = []
         self._extension_inconsistencies = []
-        # Once Python 2.6 support can be dropped, raw could be
-        # of type collections.OrderedDict
         if isinstance(source, collections.Mapping):
-            self.raw = dict(source)
+            self.raw = {}
         else:
             self.raw = {}
             self.from_binary(source, file=file)
@@ -420,12 +410,14 @@ class NiftiHeader(object):
     @property
     def descrip(self):
         """The descrip field as a byte string."""
-        return self.raw['descrip'].rstrip(b'\0')
+        return self.raw['descrip'].rstrip(b'\0').decode(
+            errors='backslashreplace')
 
     @property
     def aux_file(self):
         """The aux_file field as a byte string."""
-        return self.raw['aux_file'].rstrip(b'\0')
+        return self.raw['aux_file'].rstrip(b'\0').decode(
+            errors='backslashreplace')
 
     @property
     def intent_name(self):
@@ -442,7 +434,7 @@ class NiftiHeader(object):
     def __dir__(self):
         type_dir = set(dir(type(self)))
         dict_attributes = set(self.__dict__)
-        raw_attributes = set(self.raw.iterkeys())
+        raw_attributes = set(self.raw.keys())
         return list(type_dir | dict_attributes | raw_attributes)
 
     def print_raw(self, file=sys.stdout, describe_fields=False):
@@ -563,10 +555,10 @@ class NiftiHeader(object):
                 print("slice_end = {0}".format(self.slice_end), file=file)
 
         printed_titles = {"misc": False, "ext": False}
+
         def print_section_title(section):
             """Print the title as needed, at most once."""
-            # Work around the absence of a "nonlocal" keyword in Python2 by
-            # using a dictionary
+            nonlocal printed_titles
             if section == "misc" and not printed_titles["misc"]:
                 print(file=file)
                 print("Miscellaneous", file=file)
@@ -749,7 +741,7 @@ class NiftiHeader(object):
     @property
     def readable_pixdim(self):
         """Yield readable values for the pixdim field, with units."""
-        for i in xrange(1, self.dim[0] + 1):
+        for i in range(1, self.dim[0] + 1):
             if 1 <= i <= 3:  # space dimensions
                 yield "{0:.3}{1}".format(self.pixdim[i], self.space_unit_text)
             elif i == 4:  # time dimension
@@ -843,7 +835,7 @@ class NiftiHeader(object):
                     )
                     return
                 esize, ecode = struct.unpack(
-                    str(self.byte_order + NIFTI1_EXTENSION_HEADER_FORMAT),
+                    self.byte_order + NIFTI1_EXTENSION_HEADER_FORMAT,
                     binary_extension_header
                 )
                 if self.onefile and (pos + esize > self.vox_offset):
@@ -895,7 +887,7 @@ class Nifti1Header(NiftiHeader):
     def _test_byte_order(binary_header, byte_order):
         """Test if a binary header uses the given byte order ('<' or '>')."""
         dim0_binary = binary_header[40:42]
-        dim0 = struct.unpack(str(byte_order + 'h'), dim0_binary)[0]
+        dim0 = struct.unpack(byte_order + 'h', dim0_binary)[0]
         return 1 <= dim0 <= 7
 
     def from_binary(self, binary_header, file=None):
@@ -920,7 +912,7 @@ class Nifti1Header(NiftiHeader):
 
         self.byte_order = self._guess_byte_order(binary_header)
 
-        unpack = struct.unpack(str(self.byte_order + self.STRUCT_FORMAT),
+        unpack = struct.unpack(self.byte_order + self.STRUCT_FORMAT,
                                binary_header[:348])
         assert len(unpack) == 66
 
@@ -960,8 +952,8 @@ class Nifti1Header(NiftiHeader):
         self.raw['glmax'] = unpack[40]
         self.raw['glmin'] = unpack[41]
 
-        self.raw['descrip'] = unpack[42].rstrip('\0')
-        self.raw['aux_file'] = unpack[43].rstrip('\0')
+        self.raw['descrip'] = unpack[42].rstrip(b'\0')
+        self.raw['aux_file'] = unpack[43].rstrip(b'\0')
 
         self.raw['qform_code'] = unpack[44]
         self.raw['sform_code'] = unpack[45]
@@ -977,7 +969,7 @@ class Nifti1Header(NiftiHeader):
         self.raw['srow_y'] = unpack[56:60]
         self.raw['srow_z'] = unpack[60:64]
 
-        self.raw['intent_name'] = unpack[64].rstrip('\0')
+        self.raw['intent_name'] = unpack[64].rstrip(b'\0')
 
         self.raw['magic'] = unpack[65]
         self.onefile = (self.magic[1:2] == b'+')
@@ -1018,7 +1010,7 @@ class Nifti2Header(NiftiHeader):
     def _test_byte_order(binary_header, byte_order):
         """Test if a binary header uses the given byte order ('<' or '>')."""
         dim0_binary = binary_header[16:24]
-        dim0 = struct.unpack(str(byte_order + 'q'), dim0_binary)[0]
+        dim0 = struct.unpack(byte_order + 'q', dim0_binary)[0]
         return 1 <= dim0 <= 7
 
     def from_binary(self, binary_header, file=None):
@@ -1043,7 +1035,7 @@ class Nifti2Header(NiftiHeader):
 
         self.byte_order = self._guess_byte_order(binary_header)
 
-        unpack = struct.unpack(str(self.byte_order + self.STRUCT_FORMAT),
+        unpack = struct.unpack(self.byte_order + self.STRUCT_FORMAT,
                                binary_header[:540])
         assert len(unpack) == 60
 
@@ -1106,7 +1098,7 @@ class Nifti2Header(NiftiHeader):
         for i in super(Nifti2Header, self).list_inconsistencies():
             yield i
 
-        if self.unused_str != '':
+        if self.unused_str != b'':
             yield InconsistentNiftiError(
                 "unused_str should be set to all zero bytes")
 
@@ -1126,8 +1118,8 @@ def read_nifti_header(file):
     sizeof_hdr_bytes = file.read(4)
     if len(sizeof_hdr_bytes) < 4:
         return None  # file too short, cannot be NIfTI
-    sizeof_hdr_le = struct.unpack(str("<i"), sizeof_hdr_bytes)[0]
-    sizeof_hdr_be = struct.unpack(str(">i"), sizeof_hdr_bytes)[0]
+    sizeof_hdr_le = struct.unpack("<i", sizeof_hdr_bytes)[0]
+    sizeof_hdr_be = struct.unpack(">i", sizeof_hdr_bytes)[0]
     try:
         if NIFTI1_HEADER_SIZE in (sizeof_hdr_le, sizeof_hdr_be):
             remaining_header = file.read(Nifti1Header.TOTAL_HEADER_SIZE - 4)
@@ -1178,10 +1170,7 @@ def main():
                      .format(filename, exc))
     elif filename == "-":
         try:
-            if hasattr(sys.stdin, 'buffer'):  # Python 3
-                header = read_nifti_header(sys.stdin.buffer)
-            else:
-                header = read_nifti_header(sys.stdin)
+            header = read_nifti_header(sys.stdin.buffer)
             sys.stdin.close()
         except IOError as exc:
             sys.exit("error reading standard input: {0}".format(exc))
