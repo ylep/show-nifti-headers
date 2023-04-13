@@ -10,7 +10,7 @@ Standard input is used if the file name is a single hyphen '-'.
 # This program is based on the NIfTI-1.1 specification as described on
 # http://nifti.nimh.nih.gov/nifti-1
 
-import collections
+import collections.abc
 import logging
 import math
 import os.path
@@ -330,7 +330,7 @@ class NiftiHeader(object):
         """
         self._raw_extensions = []
         self._extension_inconsistencies = []
-        if isinstance(source, collections.Mapping):
+        if isinstance(source, collections.abc.Mapping):
             self.raw = {}
         else:
             self.raw = {}
